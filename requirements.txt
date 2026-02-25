@@ -20,4 +20,6 @@ httpx>=0.26.0
 gunicorn>=21.2.0
 google-generativeai>=0.3.0
 sentence-transformers==2.7.0
+streamlit>=1.28.0
+plotly>=5.17.0
 

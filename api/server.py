@@ -320,6 +320,171 @@ async def get_voice():
     return {"voice": current_voice_settings.voice}
 
 
+# ==================== WATER RESTRUCTURING ENDPOINTS ====================
+
+from water_restructuring.frequency_sweep import (
+    WaterRestructuringAnalyzer,
+    FrequenceType
+)
+
+class FrequencySweepRequest(BaseModel):
+    """Request for frequency sweep analysis."""
+    n_particles: int = 100
+    spacing: float = 0.65
+    spiral_strength: float = 0.15
+    seed: int = 42
+    sweep_type: str = "preset"  # "preset", "single", or "range"
+    frequency: Optional[float] = None  # For single frequency
+    start_hz: Optional[float] = 400.0  # For range sweep
+    end_hz: Optional[float] = 900.0    # For range sweep
+    steps: Optional[int] = 20          # For range sweep
+
+
+class FrequencySweepResponse(BaseModel):
+    """Response from frequency sweep analysis."""
+    sweep_type: str
+    frequencies: List[float]
+    coherence_before: List[float]
+    coherence_after: List[float]
+    improvements: List[float]
+    peak_frequency: float
+    peak_improvement: float
+    peak_coherence: float
+
+
+@app.post("/api/water/analyze-frequency", response_model=dict)
+async def analyze_single_frequency(request: FrequencySweepRequest):
+    """
+    Analyze water restructuring at a single frequency.
+    
+    Args:
+        request: Frequency sweep parameters
+        
+    Returns:
+        Analysis results with before/after coherence and visualizations
+    """
+    try:
+        analyzer = WaterRestructuringAnalyzer(
+            n_particles=request.n_particles,
+            seed=request.seed
+        )
+        
+        frequency = request.frequency or 528.0
+        result = analyzer.analyze_frequency(
+            frequency=frequency,
+            spacing=request.spacing,
+            spiral_strength=request.spiral_strength
+        )
+        
+        return {
+            "frequency": result.frequency,
+            "coherence_before": float(result.coherence_before),
+            "coherence_after": float(result.coherence_after),
+            "improvement_percent": float(result.improvement_percent),
+            "resonance_amplitude": float(result.resonance_amplitude),
+            "particles_before": result.particle_positions_before.tolist(),
+            "particles_after": result.particle_positions_after.tolist()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in water frequency analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/water/sweep-preset", response_model=FrequencySweepResponse)
+async def sweep_preset_frequencies(request: FrequencySweepRequest):
+    """
+    Run frequency sweep across all preset healing frequencies.
+    
+    Args:
+        request: Sweep parameters
+        
+    Returns:
+        Sweep results with all frequencies tested
+    """
+    try:
+        analyzer = WaterRestructuringAnalyzer(
+            n_particles=request.n_particles,
+            seed=request.seed
+        )
+        
+        sweep_results = analyzer.sweep_preset_frequencies()
+        
+        return FrequencySweepResponse(
+            sweep_type="preset",
+            frequencies=sweep_results.frequencies,
+            coherence_before=sweep_results.coherence_before,
+            coherence_after=sweep_results.coherence_after,
+            improvements=sweep_results.improvements,
+            peak_frequency=sweep_results.peak_frequency,
+            peak_improvement=sweep_results.peak_improvement,
+            peak_coherence=sweep_results.coherence_after[
+                sweep_results.frequencies.index(sweep_results.peak_frequency)
+            ]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in water preset sweep: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/water/sweep-range", response_model=FrequencySweepResponse)
+async def sweep_frequency_range(request: FrequencySweepRequest):
+    """
+    Run frequency sweep across a custom frequency range.
+    
+    Args:
+        request: Sweep parameters with start_hz, end_hz, steps
+        
+    Returns:
+        Sweep results with all frequencies tested
+    """
+    try:
+        analyzer = WaterRestructuringAnalyzer(
+            n_particles=request.n_particles,
+            seed=request.seed
+        )
+        
+        sweep_results = analyzer.sweep_frequency_range(
+            start_hz=request.start_hz or 400.0,
+            end_hz=request.end_hz or 900.0,
+            steps=request.steps or 20
+        )
+        
+        return FrequencySweepResponse(
+            sweep_type="range",
+            frequencies=sweep_results.frequencies,
+            coherence_before=sweep_results.coherence_before,
+            coherence_after=sweep_results.coherence_after,
+            improvements=sweep_results.improvements,
+            peak_frequency=sweep_results.peak_frequency,
+            peak_improvement=sweep_results.peak_improvement,
+            peak_coherence=sweep_results.coherence_after[
+                sweep_results.frequencies.index(sweep_results.peak_frequency)
+            ]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in water range sweep: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/water/frequencies")
+async def get_preset_frequencies():
+    """Get list of preset healing frequencies."""
+    from water_restructuring.frequency_sweep import FrequencyType
+    
+    return {
+        "preset_frequencies": [
+            {
+                "name": f.name.replace("HZ_", "").replace("_", " "),
+                "frequency": f.value
+            }
+            for f in FrequencyType
+        ]
+    }
+
+
 # Mount static files (will create later)
 static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
