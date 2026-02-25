@@ -324,7 +324,7 @@ async def get_voice():
 
 from water_restructuring.frequency_sweep import (
     WaterRestructuringAnalyzer,
-    FrequenceType
+    FrequencyType
 )
 
 class FrequencySweepRequest(BaseModel):
