@@ -4,18 +4,81 @@ let audioChunks = [];
 let isRecording = false;
 let currentAudio = null;
 
+// Generate a UUID, falling back to a timestamp+random string if crypto.randomUUID is unavailable
+function generateSessionId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    // Fallback: timestamp (ms) + 3 random segments for adequate uniqueness
+    return Date.now().toString(36) + '-' +
+        Math.random().toString(36).slice(2, 10) + '-' +
+        Math.random().toString(36).slice(2, 10);
+}
+
+// Persistent session ID (survives page reloads)
+let sessionId = localStorage.getItem('conductor_session_id');
+if (!sessionId) {
+    sessionId = generateSessionId();
+    localStorage.setItem('conductor_session_id', sessionId);
+}
+
 const micButton = document.getElementById('micButton');
 const status = document.getElementById('status');
 const messages = document.getElementById('messages');
 const recordingIndicator = document.getElementById('recordingIndicator');
 const voiceSelect = document.getElementById('voiceSelect');
 
+// Restore previous conversation from localStorage on load
+function restoreHistory() {
+    const saved = localStorage.getItem('conductor_history_' + sessionId);
+    if (saved) {
+        try {
+            const history = JSON.parse(saved);
+            if (history.length > 0) {
+                messages.innerHTML = '';
+                history.forEach(turn => addMessage(turn.role === 'user' ? 'user' : 'assistant', turn.content));
+            }
+        } catch (e) { /* ignore */ }
+    }
+}
+
+function saveHistory(role, content) {
+    const key = 'conductor_history_' + sessionId;
+    let history = [];
+    try { history = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) {}
+    history.push({ role, content });
+    if (history.length > 40) history = history.slice(-40);
+    localStorage.setItem(key, JSON.stringify(history));
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     setupMicrophone();
     setupTextChat();
+    setupClearButton();
     loadSettings();
+    restoreHistory();
 });
+
+// Clear conversation history
+function setupClearButton() {
+    const clearButton = document.getElementById('clearButton');
+    if (!clearButton) return;
+    clearButton.addEventListener('click', async () => {
+        // Clear server-side history
+        try {
+            await fetch('/api/history/' + sessionId, { method: 'DELETE' });
+        } catch (e) { /* best effort */ }
+        // Clear local history
+        localStorage.removeItem('conductor_history_' + sessionId);
+        // Generate a new session
+        sessionId = generateSessionId();
+        localStorage.setItem('conductor_session_id', sessionId);
+        // Reset UI
+        messages.innerHTML = '<div class="text-white text-center opacity-75 py-8"><p class="text-lg mb-2">👋 Hi there!</p><p class="text-sm">Tap the microphone and start talking</p></div>';
+        showStatus('Conversation cleared. Starting fresh.', 'ready');
+    });
+}
 
 // Setup text chat
 function setupTextChat() {
@@ -45,18 +108,25 @@ function setupTextChat() {
 async function sendTextMessage(text) {
     try {
         addMessage('user', text);
+        saveHistory('user', text);
         showStatus('Thinking...', 'processing');
         
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: text })
+            body: JSON.stringify({ query: text, session_id: sessionId })
         });
         
         if (!response.ok) throw new Error('API request failed');
         
         const data = await response.json();
+        // Update session ID in case server assigned a new one
+        if (data.session_id) {
+            sessionId = data.session_id;
+            localStorage.setItem('conductor_session_id', sessionId);
+        }
         addMessage('assistant', data.response);
+        saveHistory('assistant', data.response);
         
         if (data.sources && data.sources.length > 0) {
             const sourcesText = data.sources.slice(0, 2).map(s => 
@@ -140,6 +210,7 @@ async function sendVoiceMessage(audioBlob) {
         // Create form data
         const formData = new FormData();
         formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('session_id', sessionId);
         
         // Send to API
         const response = await fetch('/api/voice-chat', {
@@ -152,12 +223,20 @@ async function sendVoiceMessage(audioBlob) {
         }
         
         const data = await response.json();
+
+        // Update session ID in case server assigned a new one
+        if (data.session_id) {
+            sessionId = data.session_id;
+            localStorage.setItem('conductor_session_id', sessionId);
+        }
         
         // Update user message with transcription
         updateLastMessage('user', data.transcription);
+        saveHistory('user', data.transcription);
         
         // Add assistant response
         addMessage('assistant', data.response);
+        saveHistory('assistant', data.response);
         
         // Add sources if available
         if (data.sources && data.sources.length > 0) {
