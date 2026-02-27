@@ -12,16 +12,26 @@ from pathlib import Path
 _pkg_dir = str(Path(__file__).resolve().parent.parent)
 if _pkg_dir not in sys.path:
     sys.path.insert(0, _pkg_dir)
-from typing import Optional
+from typing import Dict, List, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from conductor.agent import ConductorAgent
-from voice.voice_processor import get_voice_processor
 from utils.logger import logger
 from config.settings import settings
+
+# Heavy imports are deferred so the server can start even when optional
+# dependencies (chromadb, openai …) are not installed.
+try:
+    from conductor.agent import ConductorAgent  # noqa: F401 – used in get_conductor()
+except Exception:
+    ConductorAgent = None  # type: ignore
+
+try:
+    from voice.voice_processor import get_voice_processor as _get_voice_processor
+except Exception:
+    _get_voice_processor = None  # type: ignore
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -73,7 +83,9 @@ def get_voice():
     """Lazy initialization of voice processor."""
     global voice_processor
     if voice_processor is None:
-        voice_processor = get_voice_processor()
+        if _get_voice_processor is None:
+            raise HTTPException(status_code=503, detail="Voice processing unavailable: openai not installed")
+        voice_processor = _get_voice_processor()
     return voice_processor
 
 # Create temp directory for audio files
@@ -85,12 +97,14 @@ TEMP_DIR.mkdir(exist_ok=True)
 class ChatRequest(BaseModel):
     query: str
     platform_filter: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     response: str
     sources: list
     audio_url: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class VoiceSettings(BaseModel):
@@ -99,6 +113,22 @@ class VoiceSettings(BaseModel):
 
 # In-memory voice settings (could be persisted later)
 current_voice_settings = VoiceSettings()
+
+# In-memory session conversation history: session_id -> list of {role, content}
+_session_histories: Dict[str, List[Dict[str, str]]] = {}
+_MAX_HISTORY = 20  # keep last 20 turns per session
+
+
+def _get_session_history(session_id: str) -> List[Dict[str, str]]:
+    return _session_histories.setdefault(session_id, [])
+
+
+def _append_history(session_id: str, role: str, content: str) -> None:
+    history = _get_session_history(session_id)
+    history.append({"role": role, "content": content})
+    # Trim to last _MAX_HISTORY turns
+    if len(history) > _MAX_HISTORY:
+        _session_histories[session_id] = history[-_MAX_HISTORY:]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -145,15 +175,24 @@ async def chat(request: ChatRequest):
     """
     try:
         logger.info(f"Chat request: {request.query[:100]}...")
-        
+
+        session_id = request.session_id or str(uuid.uuid4())
+        history = _get_session_history(session_id)
+
         result = get_conductor().chat(
             query=request.query,
-            platform_filter=request.platform_filter
+            platform_filter=request.platform_filter,
+            conversation_history=history,
         )
+
+        # Persist the new turn
+        _append_history(session_id, "user", request.query)
+        _append_history(session_id, "assistant", result['response'])
         
         return ChatResponse(
             response=result['response'],
-            sources=result['sources']
+            sources=result['sources'],
+            session_id=session_id,
         )
         
     except Exception as e:
@@ -161,8 +200,21 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/history/{session_id}")
+async def get_history(session_id: str):
+    """Get conversation history for a session."""
+    return {"session_id": session_id, "history": _get_session_history(session_id)}
+
+
+@app.delete("/api/history/{session_id}")
+async def clear_history(session_id: str):
+    """Clear conversation history for a session."""
+    _session_histories.pop(session_id, None)
+    return {"session_id": session_id, "cleared": True}
+
+
 @app.post("/api/voice-chat")
-async def voice_chat(audio: UploadFile = File(...)):
+async def voice_chat(audio: UploadFile = File(...), session_id: Optional[str] = None):
     """
     Voice-based chat endpoint.
     Accepts audio input, transcribes it, generates response, and returns audio.
@@ -190,8 +242,14 @@ async def voice_chat(audio: UploadFile = File(...)):
         logger.info(f"Transcription: {transcription}")
         
         # Get response from conductor
-        result = get_conductor().chat(query=transcription)
+        session_id = session_id or str(uuid.uuid4())
+        history = _get_session_history(session_id)
+        result = get_conductor().chat(query=transcription, conversation_history=history)
         response_text = result['response']
+
+        # Persist the new turn
+        _append_history(session_id, "user", transcription)
+        _append_history(session_id, "assistant", response_text)
         
         # Synthesize speech from response
         output_path = TEMP_DIR / f"output_{audio_id}.mp3"
@@ -208,7 +266,8 @@ async def voice_chat(audio: UploadFile = File(...)):
             "transcription": transcription,
             "response": response_text,
             "sources": result['sources'],
-            "audio_url": f"/api/audio/{output_path.name}"
+            "audio_url": f"/api/audio/{output_path.name}",
+            "session_id": session_id,
         }
         
     except Exception as e:

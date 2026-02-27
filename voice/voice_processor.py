@@ -5,7 +5,14 @@ Voice processing with OpenAI Whisper (speech-to-text) and TTS (text-to-speech).
 import os
 from pathlib import Path
 from typing import Optional
-from openai import OpenAI
+
+try:
+    from openai import OpenAI
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    OpenAI = None  # type: ignore
+    _OPENAI_AVAILABLE = False
+
 from config.settings import settings
 from utils.logger import logger
 
@@ -15,6 +22,8 @@ class VoiceProcessor:
     
     def __init__(self):
         """Initialize voice processor with OpenAI client."""
+        if not _OPENAI_AVAILABLE:
+            raise ImportError("openai package is required for voice processing. Run: pip install openai")
         if not settings.openai_api_key:
             raise ValueError("OpenAI API key is required for voice processing")
         

@@ -118,7 +118,8 @@ class ConductorAgent:
         self,
         query: str,
         platform_filter: str = None,
-        max_context_tokens: int = 4000
+        max_context_tokens: int = 4000,
+        conversation_history: List[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Answer a query using RAG with conversation history.
@@ -127,6 +128,7 @@ class ConductorAgent:
             query: User question
             platform_filter: Optional platform to filter (chatgpt, gemini, grok, antigravity)
             max_context_tokens: Maximum tokens for context
+            conversation_history: Optional list of prior turns [{role, content}, ...]
             
         Returns:
             Dict with 'response', 'sources', and 'context_used'
@@ -183,9 +185,20 @@ Always mention the source platform (ChatGPT/Gemini/Grok/Antigravity) when refere
         else:
             system_prompt = base_system_prompt
 
+        # Build prior-turn context for multi-turn support
+        history_text = ""
+        if conversation_history:
+            turns = []
+            for turn in conversation_history[-10:]:  # limit to last 10 turns
+                role_label = "User" if turn["role"] == "user" else "Assistant"
+                turns.append(f"{role_label}: {turn['content']}")
+            if turns:
+                history_text = "\n\nPrevious conversation:\n" + "\n".join(turns)
+
         user_prompt = f"""Based on my conversation history, please answer this question:
 
 {query}
+{history_text}
 
 Here is the relevant context from your past conversations:
 

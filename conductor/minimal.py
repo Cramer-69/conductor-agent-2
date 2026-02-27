@@ -8,7 +8,7 @@ The goal is to allow the API/CLI to start and return helpful messages
 when running in constrained environments.
 """
 from pathlib import Path
-from typing import Dict, Any, Iterator
+from typing import Dict, Any, Iterator, List, Optional
 from skills.manager import SkillManager
 from utils.logger import logger
 from config import settings
@@ -43,7 +43,7 @@ class MinimalConductor:
             return True
         return False
 
-    def chat(self, query: str, platform_filter: str = None) -> Dict[str, Any]:
+    def chat(self, query: str, platform_filter: str = None, conversation_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """Return a short, helpful response explaining minimal mode."""
         base = (
             "Minimal mode: no AI provider configured. "
@@ -66,7 +66,7 @@ class MinimalConductor:
             "model": self.model,
         }
 
-    def stream_chat(self, query: str, platform_filter: str = None) -> Iterator[Dict[str, Any]]:
+    def stream_chat(self, query: str, platform_filter: str = None, conversation_history: Optional[List[Dict[str, str]]] = None) -> Iterator[Dict[str, Any]]:
         """Yield a minimal stream: first empty sources, then the response in chunks."""
         # Yield empty sources list first for parity with full conductor
         yield {"type": "sources", "data": []}

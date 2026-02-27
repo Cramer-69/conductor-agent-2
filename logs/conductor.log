@@ -118,3 +118,7 @@
 2026-02-16 09:04:17 | conductor_agent | INFO | Generating 1 embeddings (0 cached)
 2026-02-16 09:04:18 | conductor_agent | ERROR | Error generating embeddings: 404 models/text-embedding-004 is not found for API version v1beta, or is not supported for embedContent. Call ListModels to see the list of available models and their supported methods.
 2026-02-16 09:04:18 | conductor_agent | ERROR | Error in chat endpoint: 404 models/text-embedding-004 is not found for API version v1beta, or is not supported for embedContent. Call ListModels to see the list of available models and their supported methods.
+2026-02-27 03:36:32 | conductor_agent | INFO | Loaded 0 skills from /home/runner/work/conductor-agent-2/conductor-agent-2/skills
+2026-02-27 03:36:32 | conductor_agent | INFO | Initialized MinimalConductor (no external AI providers)
+2026-02-27 03:39:24 | conductor_agent | INFO | Loaded 0 skills from /home/runner/work/conductor-agent-2/conductor-agent-2/skills
+2026-02-27 03:39:24 | conductor_agent | INFO | Initialized MinimalConductor (no external AI providers)
