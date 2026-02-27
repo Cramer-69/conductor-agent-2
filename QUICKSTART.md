@@ -3,10 +3,10 @@
 ## 🚀 3-Minute Setup
 
 ### 1. Configure Your API Key
-```powershell
-cd "c:\Users\jjc29\antigravity agent 1\conductor_agent"
-copy .env.example .env
-notepad .env
+```bash
+cd conductor_agent
+cp .env.example .env
+# Edit .env with your preferred text editor
 ```
 
 Add your OpenAI API key:
@@ -15,14 +15,14 @@ OPENAI_API_KEY=sk-your-actual-key-here
 ```
 
 ### 2. Ingest Your Antigravity Conversations
-```powershell
+```bash
 python ingest.py
 ```
 
 Wait for processing... ☕ (first run takes ~5-10 minutes)
 
 ### 3. Start Chatting!
-```powershell
+```bash
 python -m cli.interactive
 ```
 
@@ -71,7 +71,7 @@ You: /exit
 
 ## 📖 Full Documentation
 
-See [README.md](file:///c:/Users/jjc29/antigravity%20agent%201/conductor_agent/README.md) for complete documentation.
+See [README.md](README.md) for complete documentation.
 
 ## ✨ You're All Set!
 
