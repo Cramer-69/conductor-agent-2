@@ -12,7 +12,7 @@ from pathlib import Path
 _pkg_dir = str(Path(__file__).resolve().parent.parent)
 if _pkg_dir not in sys.path:
     sys.path.insert(0, _pkg_dir)
-from typing import Optional
+from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -69,7 +69,7 @@ def get_conductor():
                 raise ValueError(f"Could not initialize any conductor: {e}")
     return conductor
 
-def get_voice():
+def get_voice_processor_instance():
     """Lazy initialization of voice processor."""
     global voice_processor
     if voice_processor is None:
@@ -185,7 +185,7 @@ async def voice_chat(audio: UploadFile = File(...)):
         logger.info(f"Received audio file: {input_path}")
         
         # Transcribe audio to text
-        vp = get_voice()
+        vp = get_voice_processor_instance()
         transcription = await vp.transcribe_audio(input_path)
         logger.info(f"Transcription: {transcription}")
         
@@ -260,7 +260,7 @@ async def transcribe(audio: UploadFile = File(...)):
             f.write(content)
         
         # Transcribe
-        transcription = await voice_processor.transcribe_audio(temp_path)
+        transcription = await get_voice_processor_instance().transcribe_audio(temp_path)
         
         # Clean up
         temp_path.unlink()
@@ -288,7 +288,7 @@ async def synthesize(text: str, voice: Optional[str] = None):
         audio_id = str(uuid.uuid4())
         output_path = TEMP_DIR / f"synth_{audio_id}.mp3"
         
-        await voice_processor.synthesize_speech(
+        await get_voice_processor_instance().synthesize_speech(
             text=text,
             output_path=output_path,
             voice=voice or current_voice_settings.voice
@@ -304,7 +304,7 @@ async def synthesize(text: str, voice: Optional[str] = None):
 @app.get("/api/voices")
 async def get_voices():
     """Get available TTS voices."""
-    return {"voices": voice_processor.get_available_voices()}
+    return {"voices": get_voice_processor_instance().get_available_voices()}
 
 
 @app.post("/api/settings/voice")
