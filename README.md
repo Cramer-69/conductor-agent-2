@@ -90,13 +90,13 @@ Run the ingestion script to process and index your conversations:
 
 ```bash
 # Ingest all platforms
-python ingest.py --chatgpt "path/to/conversations.json" --gemini "path/to/gemini_export" --grok "path/to/grok_export.zip" --antigravity "C:/Users/jjc29/.gemini/antigravity/brain"
+python ingest.py --chatgpt "path/to/conversations.json" --gemini "path/to/gemini_export" --grok "path/to/grok_export.zip" --antigravity "path/to/.gemini/antigravity/brain"
 
 # Or just Antigravity (default)
 python ingest.py
 
 # Reset database and re-ingest
-python ingest.py --reset --antigravity "C:/Users/jjc29/.gemini/antigravity/brain"
+python ingest.py --reset --antigravity "path/to/.gemini/antigravity/brain"
 ```
 
 ### 5. Start the CLI
@@ -178,7 +178,7 @@ CHUNK_OVERLAP=200
 TOP_K=5
 
 # Data Paths
-ANTIGRAVITY_BRAIN_DIR=C:/Users/jjc29/.gemini/antigravity/brain
+ANTIGRAVITY_BRAIN_DIR=./data/antigravity/brain
 ```
 
 ## 🎨 CLI Commands
@@ -235,12 +235,12 @@ ANTIGRAVITY_BRAIN_DIR=C:/Users/jjc29/.gemini/antigravity/brain
 
 ## 🚧 Future Enhancements
 
-- [x ] LangGraph conductor orchestration with specialized sub-agents
-- [ x] Web UI interface
-- [x ] Support for more platforms (Claude, Perplexity)
-- [ x] Real-time conversation sync
-- [x ] Export to NotebookLM format
-- [x ] Conversation analytics and insights
+- [x] LangGraph conductor orchestration with specialized sub-agents
+- [x] Web UI interface
+- [x] Support for more platforms (Claude, Perplexity)
+- [x] Real-time conversation sync
+- [x] Export to NotebookLM format
+- [x] Conversation analytics and insights
 
 ## 📝 License
 
