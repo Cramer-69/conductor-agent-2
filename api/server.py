@@ -12,16 +12,26 @@ from pathlib import Path
 _pkg_dir = str(Path(__file__).resolve().parent.parent)
 if _pkg_dir not in sys.path:
     sys.path.insert(0, _pkg_dir)
-from typing import Optional
+from typing import Dict, List, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from conductor.agent import ConductorAgent
-from voice.voice_processor import get_voice_processor
 from utils.logger import logger
 from config.settings import settings
+
+# Heavy imports are deferred so the server can start even when optional
+# dependencies (chromadb, openai …) are not installed.
+try:
+    from conductor.agent import ConductorAgent  # noqa: F401 – used in get_conductor()
+except Exception:
+    ConductorAgent = None  # type: ignore
+
+try:
+    from voice.voice_processor import get_voice_processor as _get_voice_processor
+except Exception:
+    _get_voice_processor = None  # type: ignore
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -73,7 +83,9 @@ def get_voice():
     """Lazy initialization of voice processor."""
     global voice_processor
     if voice_processor is None:
-        voice_processor = get_voice_processor()
+        if _get_voice_processor is None:
+            raise HTTPException(status_code=503, detail="Voice processing unavailable: openai not installed")
+        voice_processor = _get_voice_processor()
     return voice_processor
 
 # Create temp directory for audio files
@@ -85,12 +97,14 @@ TEMP_DIR.mkdir(exist_ok=True)
 class ChatRequest(BaseModel):
     query: str
     platform_filter: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     response: str
     sources: list
     audio_url: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class VoiceSettings(BaseModel):
@@ -99,6 +113,22 @@ class VoiceSettings(BaseModel):
 
 # In-memory voice settings (could be persisted later)
 current_voice_settings = VoiceSettings()
+
+# In-memory session conversation history: session_id -> list of {role, content}
+_session_histories: Dict[str, List[Dict[str, str]]] = {}
+_MAX_HISTORY = 20  # keep last 20 turns per session
+
+
+def _get_session_history(session_id: str) -> List[Dict[str, str]]:
+    return _session_histories.setdefault(session_id, [])
+
+
+def _append_history(session_id: str, role: str, content: str) -> None:
+    history = _get_session_history(session_id)
+    history.append({"role": role, "content": content})
+    # Trim to last _MAX_HISTORY turns
+    if len(history) > _MAX_HISTORY:
+        _session_histories[session_id] = history[-_MAX_HISTORY:]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -260,7 +290,7 @@ async def transcribe(audio: UploadFile = File(...)):
             f.write(content)
         
         # Transcribe
-        transcription = await voice_processor.transcribe_audio(temp_path)
+        transcription = await get_voice().transcribe_audio(temp_path)
         
         # Clean up
         temp_path.unlink()
@@ -288,7 +318,7 @@ async def synthesize(text: str, voice: Optional[str] = None):
         audio_id = str(uuid.uuid4())
         output_path = TEMP_DIR / f"synth_{audio_id}.mp3"
         
-        await voice_processor.synthesize_speech(
+        await get_voice().synthesize_speech(
             text=text,
             output_path=output_path,
             voice=voice or current_voice_settings.voice
@@ -304,7 +334,7 @@ async def synthesize(text: str, voice: Optional[str] = None):
 @app.get("/api/voices")
 async def get_voices():
     """Get available TTS voices."""
-    return {"voices": voice_processor.get_available_voices()}
+    return {"voices": get_voice().get_available_voices()}
 
 
 @app.post("/api/settings/voice")
@@ -315,7 +345,7 @@ async def set_voice(settings: VoiceSettings):
 
 
 @app.get("/api/settings/voice")
-async def get_voice():
+async def get_voice_settings():
     """Get current voice settings."""
     return {"voice": current_voice_settings.voice}
 
