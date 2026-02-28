@@ -3,10 +3,8 @@
 ## 🚀 3-Minute Setup
 
 ### 1. Configure Your API Key
-```powershell
-cd "c:\Users\jjc29\antigravity agent 1\conductor_agent"
+```bash
 copy .env.example .env
-notepad .env
 ```
 
 Add your OpenAI API key:
@@ -71,7 +69,7 @@ You: /exit
 
 ## 📖 Full Documentation
 
-See [README.md](file:///c:/Users/jjc29/antigravity%20agent%201/conductor_agent/README.md) for complete documentation.
+See [README.md](README.md) for complete documentation.
 
 ## ✨ You're All Set!
 

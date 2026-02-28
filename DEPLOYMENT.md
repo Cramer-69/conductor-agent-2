@@ -22,11 +22,9 @@
 
 ### Step 2: Push Code to GitHub
 
-Open PowerShell in your conductor_agent folder:
+Open a terminal in your conductor_agent folder:
 
-```powershell
-cd "c:\Users\jjc29\antigravity agent 1\conductor_agent"
-
+```bash
 # Initialize git
 git init
 git add .
